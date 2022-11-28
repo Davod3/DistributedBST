@@ -14,6 +14,9 @@
 #include <client_stub-private.h>
 #include <client_stub.h>
 #include <sdmessage.pb-c.h>
+#include "zookeeper/zookeeper.h"
+
+static zhandle_t *zh;
 
 struct rtree_t *rtree_connect(const char *address_port) {
     
@@ -61,11 +64,35 @@ struct rtree_t *rtree_connect(const char *address_port) {
         return NULL;
     }
 
+    //////////////---ZOOKEEPER --////////////////////
+    
+    zookeeper_connect(address_port);
+
+
+    ///////////////---ZOOKEEPER --//////////////////////
+
     free(address_temp);
     free(address);
 
     return rtree;
 }
+
+///////////--ZOOKEEPER--//////////////////////
+
+void zookeeper_connect(char* address_port){
+    zh = zookeeper_init(address_port, watcher_client,	2000, 0, NULL, 0); 
+	if (zh == NULL)	{
+		fprintf(stderr, "Error connecting to ZooKeeper server!\n");
+	    exit(EXIT_FAILURE);
+	}
+
+    printf("Conectado ao zookeeper!");
+}
+
+void watcher_client(zhandle_t *zzh, int type, int state, const char *path, void *watcherCtx) {
+
+}
+///////////--ZOOKEEPER--//////////////////////
 
 int rtree_disconnect(struct rtree_t *rtree) {
     
