@@ -14,3 +14,7 @@ struct rtree_t {
 };
 
 void watcher_client(zhandle_t *zzh, int type, int state, const char *path, void *watcherCtx);
+
+void connection_watcher(zhandle_t *zzh, int type, int state, const char *path, void* context);
+
+void get_chain_children(zhandle_t *wzh, int type, int state, const char *zpath, void *watcher_ctx);
