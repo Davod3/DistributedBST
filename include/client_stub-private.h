@@ -5,8 +5,12 @@
 
 #include "inet.h"
 #include "sdmessage.pb-c.h"
+#include "zookeeper/zookeeper.h"
+
 
 struct rtree_t {
     int sockfd;
     struct sockaddr_in* serverAddr;
 };
+
+void watcher_client(zhandle_t *zzh, int type, int state, const char *path, void *watcherCtx);
