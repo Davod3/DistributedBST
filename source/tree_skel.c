@@ -16,12 +16,12 @@
 #include <tree_skel-private.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <zookeeper/zookeeper.h>
 
 struct tree_t* tree = NULL;     //Tree data structure
 int last_assigned = 1;          //ID of last assigned request
 struct request_t *queue_head;   //Head of the request queue
 struct op_proc op_status;       //Status of the operations
-pthread_t* threads;             //Stores the ids of initialized threads
 
 //Queue sync
 pthread_mutex_t queue_lock;
@@ -32,6 +32,10 @@ pthread_mutex_t op_proc_lock;
 
 //Tree sync
 pthread_mutex_t tree_lock;
+
+//Zookeeper
+struct rtree_t rtree;
+typedef struct String_vector zoo_string;
 
 int verify(int op_n) {
 
@@ -59,13 +63,18 @@ int verify(int op_n) {
     return 1;
 }
 
-int tree_skel_init(int N){
+int tree_skel_init(char* zHost){
+
+    char* address_temp = malloc(sizeof(char) * strlen(zHost) + 1);
+    strcpy(address_temp, zHost);
+
+    //Connect to zookeper
+    zookeeper_connect(address_temp);
 
     tree = tree_create();
-    threads = malloc(N * sizeof(pthread_t));
 
     op_status.max_proc = 0;
-    op_status.in_progress = malloc(N * sizeof(int));
+    op_status.in_progress = malloc(sizeof(int));
 
     queue_head = NULL;
 
@@ -80,22 +89,80 @@ int tree_skel_init(int N){
         return -1;
     }
 
-    for(int i = 0; i < N; i++){
-        //Create threads
-        pthread_t thread;
+    //Create threads
+    pthread_t thread;
 
-        int result = pthread_create(&thread, NULL, process_request, (void *)(intptr_t)i);
-        pthread_detach(thread);
+    int i = 1;
 
-        if(result < 0){
-            perror("Failed to create thread");
-            return -1;
-        }
+    int result = pthread_create(&thread, NULL, process_request, (void *)(intptr_t)i);
+    pthread_detach(thread);
 
-        threads[i] = thread;
+    if(result < 0){
+        perror("Failed to create thread");
+        return -1;
     }
 
     return 0;
+}
+
+int zookeeper_connect(char* host){
+
+    zhandle_t* zh = zookeeper_init(host, watcher_server, 2000, 0, NULL, 0);
+    char* root = "/";
+
+    if (zh == NULL){
+        perror("Error connecting to ZooKeeper server!\n");
+        return -1;
+    }
+
+    printf("Conectado ao zookeeper! \n");
+
+    rtree.handler = zh;
+
+    //Check if /chain already exists
+
+    int retval = zoo_exists(zh, "/chain", 0, NULL);
+
+    if(retval == ZNONODE){
+        //Chain does not exist, create
+
+        retval = zoo_create(zh, "/chain", NULL, -1, & ZOO_OPEN_ACL_UNSAFE, 0 , NULL, 0);
+
+        if(retval != ZOK) {
+            perror("Error creating chain node!");
+            return -1;
+        }
+
+    } else {
+        //Chain exists, get children
+        
+    }
+
+    //zoo_string* children_list = malloc(sizeof(zoo_string));
+
+    /*
+    int retval = zoo_get_children(zh, root, 0, children_list);
+
+    if (retval != ZOK)	{
+		perror("Error getting child list from zookeeper!");
+	}
+
+    printf("Número de nodes: %d\n", children_list->count);
+
+    for (int i = 0; i < children_list->count; i++)  {
+		fprintf(stderr, "\n(%d): %s", i+1, children_list->data[i]); 
+		free(children_list->data[i]);
+	}
+    */
+
+    
+
+}
+
+void watcher_server(zhandle_t *zh, int type, int state, const char *path, void *watcherCtx){
+    
+    printf("Servidor Conectado! \n");
+
 }
 
 void tree_skel_destroy(){
@@ -105,7 +172,6 @@ void tree_skel_destroy(){
     }
 
     tree_destroy(tree);
-    free(threads);
     free(queue_head);
     free(op_status.in_progress);
 }

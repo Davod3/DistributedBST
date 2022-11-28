@@ -10,6 +10,16 @@
 #include <stdio.h>
 #include <string.h>
 #include <netdb.h>
+#include <zookeeper/zookeeper.h>
+
+struct rtree_t {
+    zhandle_t* handler;
+    int zMyNode;
+    int zNextNode;
+    int nextSocket;
+};
+
+void watcher_server(zhandle_t *zh, int type, int state, const char *path, void *watcherCtx);
 
 /* Função que insere na árvore um novo elemento entry
 *  cujos campos se encontram na mensagem dada como argumento

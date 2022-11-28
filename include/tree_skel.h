@@ -33,11 +33,11 @@ int verify(int op_n);
 /* Inicia o skeleton da árvore.
 * O main() do servidor deve chamar esta função antes de poder usar a
 * função invoke(). 
-* A função deve lançar N threads secundárias responsáveis por atender 
+* A função deve lançar uma thread secundária responsável por atender 
 * pedidos de escrita na árvore.
 * Retorna 0 (OK) ou -1 (erro, por exemplo OUT OF MEMORY)
 */
-int tree_skel_init(int N);
+int tree_skel_init(char* zHost);
 
 /* Função da thread secundária que vai processar pedidos de escrita.
 */
