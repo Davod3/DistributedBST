@@ -46,9 +46,7 @@ int main(int argc, char const *argv[])
             exit(-1);
         }
 
-        int n_threads = atoi(argv[2]);
-
-        tree_skel_init(n_threads);
+        tree_skel_init(argv[2]);
 
         int result = network_main_loop(listening_socket);
 
