@@ -14,10 +14,12 @@
 
 struct rtree_t {
     zhandle_t* handler;
-    int zMyNode;
+    char* zMyNode;
     int zNextNode;
     int nextSocket;
 };
+
+void child_watcher(zhandle_t *zh, int type, int state, const char *zpath, void *watcher_ctx);
 
 void watcher_server(zhandle_t *zh, int type, int state, const char *path, void *watcherCtx);
 

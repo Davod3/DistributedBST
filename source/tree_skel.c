@@ -36,6 +36,7 @@ pthread_mutex_t tree_lock;
 //Zookeeper
 struct rtree_t rtree;
 typedef struct String_vector zoo_string;
+static char *watcher_ctx = "ZooKeeper Data Watcher";
 
 int verify(int op_n) {
 
@@ -63,13 +64,16 @@ int verify(int op_n) {
     return 1;
 }
 
-int tree_skel_init(char* zHost){
+int tree_skel_init(char* zHost, char* address){
 
-    char* address_temp = malloc(sizeof(char) * strlen(zHost) + 1);
-    strcpy(address_temp, zHost);
+    char* zHost_temp = malloc(sizeof(char) * strlen(zHost) + 1);
+    strcpy(zHost_temp , zHost);
+
+    char* address_temp = malloc(sizeof(char) * strlen(address) + 1);
+    strcpy(address_temp , address);
 
     //Connect to zookeper
-    zookeeper_connect(address_temp);
+    zookeeper_connect(zHost_temp , address_temp);
 
     tree = tree_create();
 
@@ -105,7 +109,7 @@ int tree_skel_init(char* zHost){
     return 0;
 }
 
-int zookeeper_connect(char* host){
+int zookeeper_connect(char* host, char* sv_address){
 
     zhandle_t* zh = zookeeper_init(host, watcher_server, 2000, 0, NULL, 0);
     char* root = "/";
@@ -134,29 +138,37 @@ int zookeeper_connect(char* host){
         }
 
     } else {
-        //Chain exists, get children
+        //Chain exists, create child
+
+        int size = strlen(sv_address) + 1;
+        char* node = malloc(1024);
+        retval = zoo_create(zh, "/chain/node", sv_address, size, & ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL | ZOO_SEQUENCE, node, 1024);
+
+        if(retval != ZOK){
+            perror("Error creating client node!");
+            return -1;
+        }
+
+        rtree.zMyNode = node;
+
+        zoo_string* children_list = malloc(sizeof(zoo_string));
+
+        retval = zoo_wget_children(zh, "/chain", &child_watcher,watcher_ctx, children_list);
+
+        if (retval != ZOK) {
+            perror("Error getting child list!");
+        }
         
+        if(children_list->count > 0){
+
+        }
     }
 
-    //zoo_string* children_list = malloc(sizeof(zoo_string));
 
-    /*
-    int retval = zoo_get_children(zh, root, 0, children_list);
+}
 
-    if (retval != ZOK)	{
-		perror("Error getting child list from zookeeper!");
-	}
-
-    printf("Número de nodes: %d\n", children_list->count);
-
-    for (int i = 0; i < children_list->count; i++)  {
-		fprintf(stderr, "\n(%d): %s", i+1, children_list->data[i]); 
-		free(children_list->data[i]);
-	}
-    */
-
+void child_watcher(zhandle_t *zh, int type, int state, const char *zpath, void *watcher_ctx){
     
-
 }
 
 void watcher_server(zhandle_t *zh, int type, int state, const char *path, void *watcherCtx){
