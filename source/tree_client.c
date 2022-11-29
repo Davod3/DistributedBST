@@ -29,6 +29,7 @@ int main(int argc, char const *argv[]) {
         return -1;
     }
 
+    
     rtree = rtree_connect(argv[1]);
     if (rtree == NULL) {
         return -1;
