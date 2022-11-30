@@ -78,6 +78,9 @@ int tree_skel_init(char* zHost, char* address){
     //Connect to zookeper
     zookeeper_connect(zHost_temp , address_temp);
 
+    free(address_temp);
+    free(zHost_temp);
+
     tree = tree_create();
 
     op_status.max_proc = 0;
@@ -140,83 +143,37 @@ int zookeeper_connect(char* host, char* sv_port){
             return -1;
         }
 
-    } else {
-        //Chain exists, create child
-        char* node = malloc(1024);
-
-        char* IPport = malloc(1024);
-
-        char* IPbuffer;
-
-        get_computer_ip(&IPbuffer);
-
-        strcat(IPport, IPbuffer);
-        strcat(IPport, ":");
-        strcat(IPport, sv_port);
-
-        int size = strlen(IPport) + 1;
-
-        retval = zoo_create(zh, "/chain/node", IPport, size, & ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL | ZOO_SEQUENCE, node, 1024);
-
-        if(retval != ZOK){
-            perror("Error creating client node!");
-            return -1;
-        }
-
-        free(IPport);
-
-        rtree.zMyNode = node;
-
-        zoo_string* children_list = malloc(sizeof(zoo_string));
-
-        retval = zoo_wget_children(zh, "/chain", &child_watcher,watcher_ctx, children_list);
-
-        if (retval != ZOK) {
-            perror("Error getting child list!");
-            return -1;
-        }
-        
-        if (children_list->count >= 2){
-            
-             char* path = malloc(1024);
-
-            char* next_node = children_list->data[children_list->count - 2];
-
-            rtree.zNextNode = next_node;
-            
-            char* chain = "/chain/";
-
-            strcat(path, chain);
-
-            strcat(path, next_node);
-            
-            int* buffer_len = malloc(sizeof(int));
-            *buffer_len = 1024;
-
-            char* buffer = malloc(*buffer_len);
-
-            retval = zoo_get(zh, path, 0 , buffer, buffer_len, NULL);
-
-            if (retval != ZOK){
-                perror("Error getting metadata from node!");
-                return -1;
-            }
-
-            free(path);
-
-            if(connect_to_server(buffer) != 0) {
-                perror("Error connecting to chain server!");
-                return -1;
-            }
-
-
-        } else {
-            //This is last node
-            rtree.zNextNode = NULL;
-        }
-
-        return 0;
     }
+
+    //Chain exists, create child
+    char* node = malloc(1024);
+
+    char* IPport = malloc(1024);
+
+    char* IPbuffer = NULL;
+
+    get_computer_ip(&IPbuffer);
+
+    strcat(IPport, IPbuffer);
+    strcat(IPport, ":");
+    strcat(IPport, sv_port);
+
+    int size = strlen(IPport) + 1;
+
+    retval = zoo_create(zh, "/chain/node", IPport, size, & ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL | ZOO_SEQUENCE, node, 1024);
+
+    if(retval != ZOK){
+        perror("Error creating client node!");
+        return -1;
+    }
+
+    free(IPport);
+
+    rtree.zMyNode = node;
+
+    child_watcher(zh, 0, 0, NULL, watcher_ctx);
+
+    return 0;
 
 
 }
@@ -224,6 +181,57 @@ int zookeeper_connect(char* host, char* sv_port){
 int connect_to_server(char* address){
 
     printf("Address: %s\n", address);
+
+
+    char* address_temp = malloc(sizeof(char) * strlen(address) + 1);
+    strcpy(address_temp, address);
+    
+    char* token = strtok(address_temp, ":");
+
+    char** address_split = malloc(2*sizeof(char*));
+
+    int pointer = 0;
+
+    while (token != NULL) {
+            address_split[pointer] = token;
+
+            token = strtok(NULL, ":");
+            pointer++;
+    }
+
+    if(address_split[0] == NULL || address_split[1] == NULL) {
+        printf("Failed to connect to tree\n");
+        free(address_temp);
+        free(address_split);
+        return NULL;
+    }
+
+    printf("Connecting to ip: %s, port: %s\n", address_split[0], address_split[1]);
+
+    struct sockaddr_in server;
+
+    // Preenche estrutura server para estabelecer conexão
+    server.sin_family = AF_INET;
+    server.sin_port = htons(atoi(address_split[1])); //adress[1] é TCP
+    server.sin_addr.s_addr = inet_addr(address_split[0]);
+
+    int socketfd;
+
+    // Cria socket TCP
+    if ((socketfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("Erro ao criar socket TCP");
+        return -1;
+    }
+
+
+    // Estabelece conexão com o servidor definido em server
+    if (connect(socketfd,(struct sockaddr *)&server, sizeof(server)) < 0) {
+        perror("Erro ao conectar-se ao servidor");
+        close(socketfd);
+        return -1;
+    }
+
+    rtree.nextSocket = socketfd;
 
     return 0;
 
@@ -257,6 +265,106 @@ int get_computer_ip(char** buffer){
 
 void child_watcher(zhandle_t *zh, int type, int state, const char *zpath, void *watcher_ctx){
     
+    char* chain = "/chain";
+
+    zoo_string* children_list = malloc(sizeof(zoo_string));
+
+    int retval = zoo_wget_children(zh, chain, &child_watcher,watcher_ctx, children_list);
+
+
+    if (retval != ZOK) {
+        perror("Error getting child list!");
+        return -1;
+    }
+        
+    if (children_list->count >= 2){
+
+         sort_list(&children_list);
+
+         int counter = 0;
+
+         char* next = NULL;
+
+         int keepGoing = 1;
+
+         while(counter < children_list->count && keepGoing == 1) {
+
+            next = malloc(1024);
+            *next = '\0';
+            
+            strcat(next, chain);
+            strcat(next, "/");
+            strcat(next, children_list->data[counter]);
+
+            if(strcmp(rtree.zMyNode, next) < 0){
+                keepGoing = 0;
+                break;
+            } 
+
+            counter++;
+            free(next);
+            next = NULL;
+
+         }
+
+         rtree.zNextNode = next;
+
+         if(next != NULL) {
+
+            int* buffer_len = malloc(sizeof(int));
+            *buffer_len = 1024;
+
+            char* buffer = malloc(*buffer_len);
+
+            retval = zoo_get(zh, next, 0 , buffer, buffer_len, NULL);
+
+            if (retval != ZOK){
+                perror("Error getting metadata from node!");
+                return -1;
+            }
+
+            if(connect_to_server(buffer) != 0) {
+                perror("Error connecting to chain server!");
+                return -1;
+            }
+
+         }
+
+            
+
+    } else {
+        //This is last node
+        rtree.zNextNode = NULL;
+    }
+
+    return 0;
+
+}
+
+void sort_list(zoo_string** children_list){
+    int j;
+    int i;
+    char* temp;
+
+
+    for(i=0; i < (*children_list)->count ;i++){
+      
+      for(j=i+1; j< (*children_list)->count ;j++){
+         
+         if(strcmp((*children_list)->data[i], (*children_list)->data[j] ) > 0){
+            
+            temp = malloc(strlen((*children_list)->data[i]) + 1);
+
+            strcpy(temp, (*children_list)->data[i] );
+            strcpy((*children_list)->data[i], (*children_list)->data[j] );
+            strcpy((*children_list)->data[j],temp);
+
+            free(temp);
+
+         }
+      }
+
+    }
 }
 
 void watcher_server(zhandle_t *zh, int type, int state, const char *path, void *watcherCtx){
@@ -306,7 +414,8 @@ void * process_request (void *params){
         if(request->op == 1){
             //put
             result = put(request->key, request->data);
-            
+            //propagate
+
         } else if (request->op == 0){
             result = del(request->key);
         } else {
