@@ -414,10 +414,25 @@ void * process_request (void *params){
         if(request->op == 1){
             //put
             result = put(request->key, request->data);
-            //propagate
+            
+            if(result == 0){
+                //propagate
+                propagate_request(request);
+            }
+
+            data_destroy(request->data);
+            free(request->key);
 
         } else if (request->op == 0){
             result = del(request->key);
+
+            if(result == 0){
+                //propagate
+                propagate_request(request);
+            }
+
+            free(request->key);
+
         } else {
             //erro
         }
@@ -436,6 +451,147 @@ void * process_request (void *params){
 
     }
 
+}
+
+void propagate_request(struct request_t* request){
+
+    printf("Propagating request to servers.....\n");
+
+    if(rtree.zNextNode == NULL){
+        return;
+    }
+
+    //request->data;
+    //request->key;
+    //request->op;
+    //request->op_n;
+
+    MessageT msg;
+    message_t__init(&msg);
+
+    if(request->op == 0){
+        //delete
+
+        msg.opcode = 30;
+        msg.c_type = 10;
+        msg.data.len = strlen(request->key) + 1;
+        msg.data.data = malloc(msg.data.len * sizeof(char));
+        memcpy(msg.data.data, request->key, msg.data.len);
+
+        printf("Created del message! \n");
+
+    } else {
+        //put
+
+        msg.opcode = 50;
+        msg.c_type = 30;
+
+        MessageT__Entry temp_entry;
+        message_t__entry__init(&temp_entry);
+
+        //copy key
+        temp_entry.key = malloc(sizeof(char) * strlen(request->key) + 1);
+
+        strcpy(temp_entry.key, request->key);
+
+        //copy data
+        ProtobufCBinaryData temp_data;
+
+        temp_data.len = request->data->datasize;
+
+        temp_data.data = malloc(request->data->datasize);
+
+        memcpy(temp_data.data, request->data->data, request->data->datasize);
+
+        temp_entry.data = temp_data;
+
+        msg.entry = &temp_entry;
+
+
+        printf("Created put message with key %s - value %s! \n", msg.entry->key, msg.entry->data.data);
+
+    }
+
+    send_receive(&msg);
+}
+
+void send_receive(MessageT *msg){
+
+    printf("Talking with server....\n");
+
+    if(rtree.zNextNode == NULL){
+        return -1;
+    }
+
+    int socketfd = rtree.nextSocket;
+
+    //Serialize message:
+    int length;
+    uint8_t* buffer;
+
+    length = message_t__get_packed_size(msg);
+    buffer = malloc(length);
+
+    if(buffer == NULL){
+        perror("Buffer error");
+        return NULL;
+    }
+
+    message_t__pack(msg, buffer);
+
+    //Send message to server:
+
+    //Send size
+    int length_buf = htons(length);
+
+    if(write_all(socketfd, &length_buf, sizeof(int)) < 0){
+        return NULL;
+    }
+
+    //Send data
+    if(write_all(socketfd, buffer, length) != length){
+        return NULL;
+    }
+
+    free(buffer);
+
+    // Receive message from server
+
+    //Receive size
+    int* length_temp = malloc(sizeof(int));
+
+    if(read_all(socketfd, length_temp, sizeof(int)) < 0){
+        return NULL;
+    }
+
+    length = ntohs(*length_temp);
+
+    free(length_temp);
+
+    // Receive message
+    
+    uint8_t* buffer_rcv = malloc(length);
+
+    if(buffer_rcv == NULL){
+        perror("Buffer error");
+        return NULL;
+    }
+
+    if((read_all(socketfd, buffer_rcv,length)) != length){
+        return NULL;
+    }
+
+    MessageT* received = NULL;
+
+    received = message_t__unpack(NULL,length,buffer_rcv);
+    if (received == NULL) {
+        perror("Error unpacking message\n");
+        return NULL;
+    }
+
+    free(buffer_rcv);
+
+    message_t__free_unpacked(received, NULL);
 }
 
 int queue_add(MessageT* msg){
@@ -573,8 +729,8 @@ int put(char* key, struct data_t* data) {
     printf("Putting value %s with key %s on tree\n", (char*)data->data, key);
 
     int result = tree_put(tree, key, data);
-    data_destroy(data);
-    free(key);
+    //data_destroy(data);
+    //free(key);
 
     pthread_mutex_unlock(&tree_lock);
 
@@ -589,7 +745,7 @@ int del(char* key) {
 
     int result = tree_del(tree, key);
 
-    free(key);
+    //free(key);
 
     pthread_mutex_unlock(&tree_lock);
 
