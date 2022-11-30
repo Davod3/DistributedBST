@@ -12,27 +12,55 @@
 
 int network_connect(struct rtree_t *rtree) {
 
-    int socketfd;
+    //int socketfd;
+    int rtree_hd_sock;
+    int rtree_tl_sock;
 
-    // Cria socket TCP
-    if ((socketfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        perror("Erro ao criar socket TCP");
+    // Cria socket TCP para a head
+    if ((rtree_hd_sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("Erro ao criar socket TCP para a head");
         return -1;
     }
 
-    struct sockaddr_in server;
-    server.sin_family = rtree->serverAddr->sin_family;
-    server.sin_port = rtree->serverAddr->sin_port;
-    server.sin_addr.s_addr = rtree->serverAddr->sin_addr.s_addr;
-
-    // Estabelece conexão com o servidor definido em server
-    if (connect(socketfd,(struct sockaddr *)&server, sizeof(server)) < 0) {
-        perror("Erro ao conectar-se ao servidor");
-        close(socketfd);
+    // Cria socket TCP para a tail
+    if ((rtree_tl_sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        perror("Erro ao criar socket TCP para a tail");
         return -1;
     }
 
-    rtree->sockfd = socketfd;
+    // struct sockaddr_in server;
+    // server.sin_family = rtree->serverAddr->sin_family;
+    // server.sin_port = rtree->serverAddr->sin_port;
+    // server.sin_addr.s_addr = rtree->serverAddr->sin_addr.s_addr;
+
+    struct sockaddr_in server_head;
+    server_head.sin_family = rtree->rtree_headAddr->sin_family;
+    server_head.sin_port = rtree->rtree_headAddr->sin_port;
+    server_head.sin_addr.s_addr = rtree->rtree_headAddr->sin_addr.s_addr;
+
+    struct sockaddr_in server_tail;
+    server_tail.sin_family = rtree->rtree_tailAddr->sin_family;
+    server_tail.sin_port = rtree->rtree_tailAddr->sin_port;
+    server_tail.sin_addr.s_addr = rtree->rtree_tailAddr->sin_addr.s_addr;
+
+
+    // Estabelece conexão com o servidor definido em server para a head
+    if (connect(rtree_hd_sock,(struct sockaddr *)&server_head, sizeof(server_head)) < 0) {
+        perror("Erro ao conectar-se ao servidor hed");
+        close(rtree_hd_sock);
+        return -1;
+    }
+
+    // Estabelece conexão com o servidor definido em server para a tail
+    if (connect(rtree_tl_sock,(struct sockaddr *)&server_tail, sizeof(server_tail)) < 0) {
+        perror("Erro ao conectar-se ao servidor tail");
+        close(rtree_tl_sock);
+        return -1;
+    }
+
+    rtree->rtree_head = rtree_hd_sock;
+    rtree->rtree_tail = rtree_tl_sock;
+
 
     return 0;
 }
@@ -41,8 +69,13 @@ MessageT *network_send_receive(struct rtree_t * rtree, MessageT *msg) {
     
     printf("Talking with server....\n");
 
+    int socketfd;
+    //Check if it's write or read
+    if(msg->opcode == 50 || msg->opcode == 30)
+        socketfd = rtree->rtree_head;
+    else    
+        socketfd = rtree->rtree_tail;
     //Get socket fd:
-    int socketfd = rtree->sockfd;
 
     //Serialize message:
     int length;
@@ -114,5 +147,8 @@ MessageT *network_send_receive(struct rtree_t * rtree, MessageT *msg) {
 }
 
 int network_close(struct rtree_t * rtree) {
-    return close(rtree->sockfd);
+    if(close(rtree->rtree_head) == -1)
+        return -1;
+    else
+        return close(rtree->rtree_tail);
 }
