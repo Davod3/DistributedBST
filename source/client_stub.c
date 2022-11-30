@@ -26,50 +26,6 @@ static char *watcher_ctx = "ZooKeeper Data Watcher";
 
 
 struct rtree_t *rtree_connect(const char *address_port) {
-    
-    char* address_temp = malloc(sizeof(char) * strlen(address_port) + 1);
-    strcpy(address_temp, address_port);
-    
-    char* token = strtok(address_temp, ":");
-
-    char** address = malloc(2*sizeof(char*));
-
-    int pointer = 0;
-
-    while (token != NULL) {
-            address[pointer] = token;
-
-            token = strtok(NULL, ":");
-            pointer++;
-    }
-
-    if(address[0] == NULL || address[1] == NULL) {
-        printf("Failed to connect to tree\n");
-        free(address_temp);
-        free(address);
-        return NULL;
-    }
-
-    printf("Connecting to ip: %s, port: %s\n", address[0], address[1]);
-
-    struct sockaddr_in* server = malloc(sizeof(struct sockaddr_in));
-
-    // Preenche estrutura server para estabelecer conexão
-    server->sin_family = AF_INET;
-    server->sin_port = htons(atoi(address[1])); //adress[1] é TCP
-    server->sin_addr.s_addr = inet_addr(address[0]);
-
-    struct rtree_t* rtree = malloc(sizeof(struct rtree_t));
-    rtree->serverAddr = server;
-
-    if (network_connect(rtree) < 0) {
-        perror("Failed to connect to tree");
-        free(address_temp);
-        free(rtree);
-        free(server);
-        free(address);
-        return NULL;
-    }
 
     //////////////---ZOOKEEPER --////////////////////
     children_list =	(zoo_string *) malloc(sizeof(zoo_string));
@@ -78,16 +34,108 @@ struct rtree_t *rtree_connect(const char *address_port) {
     if (ZOK != zoo_wget_children(zh, chain_path, get_chain_children, watcher_ctx, children_list)) {
         fprintf(stderr, "Error setting watch at %s!\n", chain_path);
     }
-
-    printf("%d\n", children_list->count);
+    printf("CHILDREN_LIST:\n");
     for (int i = 0; i < children_list->count; i++)  {
-        fprintf("\n(%d): %s", i+1, children_list->data[i]);
+        printf("(%d): %s\n", i+1, children_list->data[i]);
+    }
+    ///////////////---ZOOKEEPER --//////////////////////
+    char* path_hd = malloc(1024);
+    char* path_tl = malloc(1024);
+
+    char* chain = "/chain/";
+
+    strcat(path_hd, chain);
+    strcat(path_tl, chain);
+
+    char* temp1 = children_list->data[0];
+    char* temp2 = children_list->data[children_list->count-1];
+
+    strcat(path_hd, temp1);
+    strcat(path_tl, temp2);
+
+    int* addr_temp_hd_len = malloc(sizeof(int));
+    *addr_temp_hd_len = 1024;
+    int* addr_temp_tl_len = malloc(sizeof(int));
+    *addr_temp_tl_len = 1024;
+    char* address_temp_hd = malloc(*addr_temp_hd_len);
+    char* address_temp_tl = malloc(*addr_temp_tl_len);
+
+    int get_hd_val = zoo_get(zh, path_hd, 0, address_temp_hd, addr_temp_hd_len, NULL);
+    if(get_hd_val == -1){
+        perror("Error setting watch for head");
+        return -1;
     }
 
-    ///////////////---ZOOKEEPER --//////////////////////
+    int get_tl_val = zoo_get(zh, path_tl, 0, address_temp_tl, addr_temp_tl_len, NULL);
+    if(get_tl_val == -1){
+        perror("Error setting watch for tail");
+        return -1;
+    }
 
-    free(address_temp);
-    free(address);
+
+    printf("ADDR_TEMP_HD: %s\n", address_temp_hd);
+    printf("ADDR_TEMP_TL: %s\n", address_temp_tl);
+
+    char* ip_hd = strtok(address_temp_hd, ":");
+    char* port_hd = strtok(NULL, ":");
+
+    char* ip_tl = strtok(address_temp_tl, ":");
+    char* port_tl = strtok(NULL, ":");
+
+    printf("HEAD IP: %s\n", ip_hd);
+    printf("HEAD PORT: %s\n", port_hd);
+    printf("TAIL IP: %s\n", ip_tl);
+    printf("TAIL PORT: %s\n", port_tl);
+
+    if(ip_hd == NULL || port_hd == NULL || ip_tl == NULL || port_tl == NULL) {
+        printf("Failed to connect to tree\n");
+        free(address_temp_hd);
+        free(address_temp_tl);
+        return NULL;
+    }
+
+    printf("Connecting to head ip: %s, port: %s\n", ip_hd, port_hd);
+    printf("Connecting to tail ip: %s, port: %s\n", ip_tl, port_tl);
+
+
+
+
+
+    struct sockaddr_in* server_hd = malloc(sizeof(struct sockaddr_in));
+    struct sockaddr_in* server_tl = malloc(sizeof(struct sockaddr_in));
+
+    // Preenche estrutura server_hd para estabelecer conexão
+    server_hd->sin_family = AF_INET;
+    server_hd->sin_port = htons(atoi(port_hd)); //adress[1] é TCP
+    server_hd->sin_addr.s_addr = inet_addr(ip_hd);
+
+    server_tl->sin_family = AF_INET;
+    server_tl->sin_port = htons(atoi(port_tl)); //adress[1] é TCP
+    server_tl->sin_addr.s_addr = inet_addr(ip_tl);
+
+    struct rtree_t* rtree = malloc(sizeof(struct rtree_t));
+    rtree->rtree_headAddr = server_hd;
+    rtree->rtree_tailAddr = server_tl;
+
+
+    if (network_connect(rtree) < 0) {
+        perror("Failed to connect to tree");
+        free(address_temp_hd);
+        free(address_temp_tl);
+        free(rtree);
+        free(server_hd);
+        free(server_tl);
+        // free(address_hd);
+        // free(address_tl);
+        return NULL;
+    }
+
+    free(address_temp_hd);
+    free(address_temp_tl);
+
+    // free(address_hd);
+    // free(address_tl);
+
 
     return rtree;
 }
@@ -111,13 +159,15 @@ void zookeeper_connect(char* address_port){
 	    exit(EXIT_FAILURE);
 	}
 
-    printf("Conectado ao zookeeper!");
+    printf("Conectado ao zookeeper!\n");
 }
-
 
 
 void get_chain_children(zhandle_t *wzh, int type, int state, const char *zpath, void *watcher_ctx){
     printf("GETS HERE GETCHAINCHILDREN");
+    if (ZOK != zoo_wget_children(zh, chain_path, get_chain_children, watcher_ctx, children_list)) {
+        fprintf(stderr, "Error setting watch at %s!\n", chain_path);
+    }
     children_list =	(zoo_string *) malloc(sizeof(zoo_string));
     if (state == ZOO_CONNECTED_STATE)	 {
             if (type == ZOO_CHILD_EVENT) {
@@ -143,7 +193,8 @@ int rtree_disconnect(struct rtree_t *rtree) {
         return -1;
     }
 
-    free(rtree->serverAddr);
+    free(rtree->rtree_headAddr);
+    free(rtree->rtree_tailAddr);
     free(rtree);
     return 0;
 }

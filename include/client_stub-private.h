@@ -9,8 +9,12 @@
 
 
 struct rtree_t {
-    int sockfd;
-    struct sockaddr_in* serverAddr;
+    //int sockfd;
+    //struct sockaddr_in* serverAddr;
+    struct sockaddr_in* rtree_headAddr;
+    struct sockaddr_in* rtree_tailAddr;
+    int rtree_head;
+    int rtree_tail;
 };
 
 void watcher_client(zhandle_t *zzh, int type, int state, const char *path, void *watcherCtx);
