@@ -24,6 +24,8 @@ zoo_string* children_list;
 static char *chain_path = "/chain";
 static char *watcher_ctx = "ZooKeeper Data Watcher";
 
+struct rtree_t* rtree_stub;
+
 
 struct rtree_t *rtree_connect(const char *address_port) {
 
@@ -35,7 +37,7 @@ struct rtree_t *rtree_connect(const char *address_port) {
         return NULL;
     }
     children_list =	(zoo_string *) malloc(sizeof(zoo_string));
-    if (ZOK != zoo_wget_children(zh, chain_path, get_chain_children, watcher_ctx, children_list)) {
+    if (ZOK != zoo_wget_children(zh, chain_path, child_watcher, watcher_ctx, children_list)) {
         printf("Error setting watch at %s!\n", chain_path);
         free(children_list);
         return NULL;
@@ -49,6 +51,46 @@ struct rtree_t *rtree_connect(const char *address_port) {
     for (int i = 0; i < children_list->count; i++)  {
         printf("(%d): %s\n", i+1, children_list->data[i]);
     }
+
+    //set rtree
+    
+    rtree_stub = set_rtree();
+
+    if (network_connect(rtree_stub) < 0) {
+        perror("Failed to connect to tree");
+        free(children_list);
+        return NULL;
+    }
+
+    free(children_list);
+    return rtree_stub;
+}
+
+///////////--ZOOKEEPER--//////////////////////
+
+void connection_watcher(zhandle_t *zzh, int type, int state, const char *path, void* context) {
+	if (type == ZOO_SESSION_EVENT) {
+		if (state == ZOO_CONNECTED_STATE) {
+			is_connected = 1; 
+		} else {
+			is_connected = 0; 
+		}
+	} 
+}
+
+int zookeeper_connect(char* address_port){
+    zh = zookeeper_init(address_port, connection_watcher, 2000, 0, NULL, 0); 
+	if (zh == NULL)	{
+		perror("Error connecting to ZooKeeper server!\n");
+        return -1;
+	}
+
+    printf("Conectado ao zookeeper!\n");
+    return 0;
+}
+
+struct rtree_t* set_rtree() {
+
     ///////////////---ZOOKEEPER --//////////////////////
     char* path_hd = malloc(1024);
     char* path_tl = malloc(1024);
@@ -147,78 +189,64 @@ struct rtree_t *rtree_connect(const char *address_port) {
     rtree->rtree_headAddr = server_hd;
     rtree->rtree_tailAddr = server_tl;
 
-
-    if (network_connect(rtree) < 0) {
-        perror("Failed to connect to tree");
-        free(address_temp_hd);
-        free(address_temp_tl);
-        free(rtree);
-        free(server_hd);
-        free(server_tl);
-        free(children_list);
-        free(path_hd);
-        free(path_tl);
-        free(addr_temp_hd_len);
-        free(addr_temp_tl_len);
-        return NULL;
-    }
-    free(rtree);
-    free(server_hd);
-    free(server_tl);
-    free(address_temp_hd);
-    free(address_temp_tl);
-    free(children_list);
-    free(path_hd);
-    free(path_tl);
-    free(addr_temp_hd_len);
-    free(addr_temp_tl_len);
     return rtree;
-}
 
-///////////--ZOOKEEPER--//////////////////////
-
-void connection_watcher(zhandle_t *zzh, int type, int state, const char *path, void* context) {
-	if (type == ZOO_SESSION_EVENT) {
-		if (state == ZOO_CONNECTED_STATE) {
-			is_connected = 1; 
-		} else {
-			is_connected = 0; 
-		}
-	} 
-}
-
-int zookeeper_connect(char* address_port){
-    zh = zookeeper_init(address_port, connection_watcher, 2000, 0, NULL, 0); 
-	if (zh != ZOO_CONNECTED_STATE)	{
-		perror("Error connecting to ZooKeeper server!\n");
-        return -1;
-	}
-
-    printf("Conectado ao zookeeper!\n");
-    return 0;
 }
 
 
-void get_chain_children(zhandle_t *wzh, int type, int state, const char *zpath, void *watcher_ctx){
-    printf("GETS HERE GETCHAINCHILDREN");
-    if (ZOK != zoo_wget_children(zh, chain_path, get_chain_children, watcher_ctx, children_list)) {
-        printf( "Error setting watch at %s!\n", chain_path);
+
+void sort_list(zoo_string** children_list){
+    int j;
+    int i;
+    char* temp;
+
+
+    for(i=0; i < (*children_list)->count ;i++){
+      
+      for(j=i+1; j< (*children_list)->count ;j++){
+         
+         if(strcmp((*children_list)->data[i], (*children_list)->data[j] ) > 0){
+            
+            temp = malloc(strlen((*children_list)->data[i]) + 1);
+
+            strcpy(temp, (*children_list)->data[i] );
+            strcpy((*children_list)->data[i], (*children_list)->data[j] );
+            strcpy((*children_list)->data[j],temp);
+
+            free(temp);
+
+         }
+      }
+
     }
+}
+
+
+void child_watcher(zhandle_t *wzh, int type, int state, const char *zpath, void *watcher_ctx){
+
     children_list =	(zoo_string *) malloc(sizeof(zoo_string));
+
     if (state == ZOO_CONNECTED_STATE)	 {
             if (type == ZOO_CHILD_EVENT) {
             /* Get the updated children and reset the watch */ 
-                if (ZOK != zoo_wget_children(zh, chain_path, get_chain_children, watcher_ctx, children_list)) {
+                if (ZOK != zoo_wget_children(zh, chain_path, child_watcher, watcher_ctx, children_list)) {
                     printf("Error setting watch at %s!\n", chain_path);
                 }
-                printf("\n=== znode listing === [ %s ]", chain_path); 
-                for (int i = 0; i < children_list->count; i++)  {
-                    printf("\n(%d): %s", i+1, children_list->data[i]);
+
+                sort_list(&children_list);
+
+                rtree_stub = set_rtree();
+
+                if (network_connect(rtree_stub) < 0) {
+                    perror("Failed to connect to tree");
+                    free(children_list);
+                    return NULL;
                 }
-                printf("\n=== done ===\n");
+
+                free(children_list);
+   
             } 
-        }
-    free(children_list);
+    }
 }
 ///////////--ZOOKEEPER--//////////////////////
 
