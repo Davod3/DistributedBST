@@ -79,6 +79,9 @@ void connection_watcher(zhandle_t *zzh, int type, int state, const char *path, v
 }
 
 int zookeeper_connect(char* address_port){
+
+    zoo_set_debug_level((ZooLogLevel)0);
+
     zh = zookeeper_init(address_port, connection_watcher, 2000, 0, NULL, 0); 
 	if (zh == NULL)	{
 		perror("Error connecting to ZooKeeper server!\n");

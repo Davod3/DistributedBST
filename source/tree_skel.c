@@ -117,6 +117,8 @@ int tree_skel_init(char* zHost, char* address){
 
 int zookeeper_connect(char* host, char* sv_port){
 
+    zoo_set_debug_level((ZooLogLevel)0);
+
     zhandle_t* zh = zookeeper_init(host, watcher_server, 2000, 0, NULL, 0);
     char* root = "/";
 
