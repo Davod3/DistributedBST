@@ -20,7 +20,7 @@ typedef struct String_vector zoo_string;
 
 static zhandle_t *zh;
 static int is_connected;
-zoo_string* children_list;
+//zoo_string* children_list;
 static char *chain_path = "/chain";
 static char *watcher_ctx = "ZooKeeper Data Watcher";
 
@@ -36,12 +36,17 @@ struct rtree_t *rtree_connect(const char *address_port) {
         printf("O ZooKeeper não está ligado!\n");
         return NULL;
     }
-    children_list =	(zoo_string *) malloc(sizeof(zoo_string));
+
+    zoo_string* children_list =	(zoo_string *) malloc(sizeof(zoo_string));
+
     if (ZOK != zoo_wget_children(zh, chain_path, child_watcher, watcher_ctx, children_list)) {
         printf("Error setting watch at %s!\n", chain_path);
         free(children_list);
         return NULL;
     }
+
+    sort_list(&children_list);
+
     printf("CHILDREN_LIST:\n");
     if (children_list == NULL) {
         printf("O ZooKeeper não tem nodes!\n");
@@ -54,7 +59,7 @@ struct rtree_t *rtree_connect(const char *address_port) {
 
     //set rtree
     
-    rtree_stub = set_rtree();
+    rtree_stub = set_rtree(children_list);
 
     if (network_connect(rtree_stub) < 0) {
         perror("Failed to connect to tree");
@@ -92,7 +97,7 @@ int zookeeper_connect(char* address_port){
     return 0;
 }
 
-struct rtree_t* set_rtree() {
+struct rtree_t* set_rtree(zoo_string* children_list) {
 
     ///////////////---ZOOKEEPER --//////////////////////
     char* path_hd = malloc(1024);
@@ -227,7 +232,7 @@ void sort_list(zoo_string** children_list){
 
 void child_watcher(zhandle_t *wzh, int type, int state, const char *zpath, void *watcher_ctx){
 
-    children_list =	(zoo_string *) malloc(sizeof(zoo_string));
+    zoo_string* children_list =	(zoo_string *) malloc(sizeof(zoo_string));
 
     if (state == ZOO_CONNECTED_STATE)	 {
             if (type == ZOO_CHILD_EVENT) {
@@ -238,7 +243,9 @@ void child_watcher(zhandle_t *wzh, int type, int state, const char *zpath, void 
 
                 sort_list(&children_list);
 
-                rtree_stub = set_rtree();
+                network_close(rtree_stub);
+
+                rtree_stub = set_rtree(children_list);
 
                 if (network_connect(rtree_stub) < 0) {
                     perror("Failed to connect to tree");

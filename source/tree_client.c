@@ -17,9 +17,13 @@
 struct rtree_t* rtree;
 
 void sigHandler() {
-
+    
+    printf("HELLO WORLD!\n");
+    /*
     int state = rtree_disconnect(rtree);
     exit(state);
+    */
+
 }
 
 int main(int argc, char const *argv[]) {
@@ -29,16 +33,23 @@ int main(int argc, char const *argv[]) {
         return -1;
     }
 
+    /*
+
     if(zookeeper_connect(argv[1]) == -1){
         printf("O ZooKeeper não está ligado!\n");
         return -1;
     }
+
+    */
+
+
     rtree = rtree_connect(argv[1]);
     if (rtree == NULL) {
         return -1;
     }
 
     char comando[50];
+
     printf("Insira o comando: \n");
 
         struct sigaction sa;
@@ -151,21 +162,27 @@ int main(int argc, char const *argv[]) {
             
             char** keys = rtree_get_keys(rtree);
 
-            if(keys[0] == NULL) {
-                printf("Error getting keys from tree.\n");
+            if(keys != NULL){
+
+                if(keys[0] == NULL) {
+                    printf("Error getting keys from tree.\n");
+                    free(keys);
+                } else {
+
+                    int counter = 0;
+
+                    while(keys[counter] != NULL) {
+
+                        printf("Key: %s\n", keys[counter]);
+                        free(keys[counter]);
+                        counter++;
+                    }
+
                 free(keys);
-            } else {
-
-                int counter = 0;
-                while(keys[counter] != NULL) {
-
-                    printf("Key: %s\n", keys[counter]);
-                    free(keys[counter]);
-                    counter++;
                 }
 
-                free(keys);
             }
+
         }
         else if (strcmp(comandos[0], "getvalues") == 0) {
             
