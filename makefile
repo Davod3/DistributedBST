@@ -25,10 +25,10 @@ tree-client: client-lib.o client
 tree-server: sdmessage.pb-c.o server 
 
 server: $(OBJETOS_SERVER)
-	$(CC) -D THREADED $(addprefix $(OBJ_dir)/,$(OBJETOS_SERVER)) $(OBJ_dir)/tree.o -g -o binary/tree-server -L/usr/lib -lprotobuf-c -pthread -lzookeeper_mt
+	$(CC) -D THREADED $(addprefix $(OBJ_dir)/,$(OBJETOS_SERVER)) $(OBJ_dir)/tree.o -g -o binary/tree-server -L/usr/lib -std=gnu99 -lprotobuf-c -pthread -lzookeeper_mt
 
 client: $(OBJETOS_CLIENT)
-	$(CC) -D THREADED $(addprefix $(OBJ_dir)/,$(OBJETOS_CLIENT)) $(LIB_dir)/client-lib.o -g -o binary/tree-client -L/usr/lib -lprotobuf-c -lzookeeper_mt
+	$(CC) -D THREADED $(addprefix $(OBJ_dir)/,$(OBJETOS_CLIENT)) $(LIB_dir)/client-lib.o -g -o binary/tree-client -L/usr/lib -std=gnu99 -lprotobuf-c -lzookeeper_mt
 
 sdmessage.pb-c.o:
 	protoc --c_out=. sdmessage.proto

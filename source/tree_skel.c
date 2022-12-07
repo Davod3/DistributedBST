@@ -20,6 +20,10 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
+#include <unistd.h>
 
 struct tree_t* tree = NULL;     //Tree data structure
 int last_assigned = 1;          //ID of last assigned request
@@ -156,6 +160,8 @@ int zookeeper_connect(char* host, char* sv_port){
 
     get_computer_ip(&IPbuffer);
 
+    printf("Gets here!\n");
+
     strcat(IPport, IPbuffer);
     strcat(IPport, ":");
     strcat(IPport, sv_port);
@@ -240,27 +246,44 @@ int connect_to_server(char* address){
 }
 
 int get_computer_ip(char** buffer){
-    
-    char* IP;
 
-    struct hostent* host_entry;
-    char hostbuffer[256];
+    /*
+    int n;
 
-    if(gethostname(hostbuffer, sizeof(hostbuffer)) != 0){
-        perror("Error getting hostname!");
-        return -1;
-    }
+    struct ifreq ifr;
 
-    host_entry = gethostbyname(hostbuffer);
+    char array[] = "enp0s3";
 
-    if(host_entry == NULL){
-        perror("Error getting ip address!");
-        return -1;
-    }
+    n = socket(AF_INET, SOCK_DGRAM, 0);
 
-    IP = inet_ntoa(*((struct in_addr*) host_entry->h_addr_list[0]));
+    ifr.ifr_addr.sa_family = AF_INET;
 
-    *buffer = IP;
+    strncpy(ifr.ifr_name , array , IFNAMSIZ - 1);
+
+    ioctl(n, SIOCGIFADDR, &ifr);
+
+    close(n);
+
+    */
+
+    //*buffer = inet_ntoa(( (struct sockaddr_in *)&ifr.ifr_addr )->sin_addr);
+
+
+    FILE *pf;
+
+    char command[1024];
+    char data[512];
+
+    //Set command
+    sprintf(command, "ip route get 1.1.1.1 | grep -oP 'src \\K\\S+'");
+
+    pf = popen(command , "r");
+
+    fgets(data, 512 , pf);
+    int len = strlen(data);
+    data[len-1] = '\0';
+
+    *buffer = data;
 
     return 0;
 }
