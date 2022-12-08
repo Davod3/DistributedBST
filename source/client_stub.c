@@ -178,19 +178,11 @@ struct rtree_t* set_rtree(zoo_string* children_list) {
         return NULL;
     }
 
-    printf("ADDR_TEMP_HD: %s\n", address_temp_hd);
-    printf("ADDR_TEMP_TL: %s\n", address_temp_tl);
-
     char* ip_hd = strtok(address_temp_hd, ":");
     char* port_hd = strtok(NULL, ":");
 
     char* ip_tl = strtok(address_temp_tl, ":");
     char* port_tl = strtok(NULL, ":");
-
-    printf("HEAD IP: %s\n", ip_hd);
-    printf("HEAD PORT: %s\n", port_hd);
-    printf("TAIL IP: %s\n", ip_tl);
-    printf("TAIL PORT: %s\n", port_tl);
 
     if(ip_hd == NULL || port_hd == NULL || ip_tl == NULL || port_tl == NULL) {
         printf("Failed to connect to tree\n");

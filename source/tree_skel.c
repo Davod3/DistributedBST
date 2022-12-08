@@ -24,6 +24,7 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <unistd.h>
+#include <message-private.h>
 
 struct tree_t* tree = NULL;     //Tree data structure
 int last_assigned = 1;          //ID of last assigned request
@@ -44,6 +45,189 @@ pthread_mutex_t tree_lock;
 struct rtree_t rtree;
 typedef struct String_vector zoo_string;
 static char *watcher_ctx = "ZooKeeper Data Watcher";
+
+void send_receive(MessageT *msg){
+
+    printf("Talking with server....\n");
+
+    if(rtree.zNextNode == NULL){
+        return;
+    }
+
+    int socketfd = rtree.nextSocket;
+
+    //Serialize message:
+    int length;
+    uint8_t* buffer;
+
+    length = message_t__get_packed_size(msg);
+    buffer = malloc(length);
+
+    if(buffer == NULL){
+        perror("Buffer error");
+        return;
+    }
+
+    message_t__pack(msg, buffer);
+
+    //Send message to server:
+
+    //Send size
+    int length_buf = htons(length);
+
+    if(write_all(socketfd, &length_buf, sizeof(int)) < 0){
+        return;
+    }
+
+    //Send data
+    if(write_all(socketfd, buffer, length) != length){
+        return;
+    }
+
+    free(buffer);
+
+    // Receive message from server
+
+    //Receive size
+    int* length_temp = malloc(sizeof(int));
+
+    if(read_all(socketfd, length_temp, sizeof(int)) < 0){
+        return;
+    }
+
+    length = ntohs(*length_temp);
+
+    free(length_temp);
+
+    // Receive message
+    
+    uint8_t* buffer_rcv = malloc(length);
+
+    if(buffer_rcv == NULL){
+        perror("Buffer error");
+        return;
+    }
+
+    if((read_all(socketfd, buffer_rcv,length)) != length){
+        return;
+    }
+
+    MessageT* received = NULL;
+
+    received = message_t__unpack(NULL,length,buffer_rcv);
+    if (received == NULL) {
+        perror("Error unpacking message\n");
+        return;
+    }
+
+    free(buffer_rcv);
+
+    message_t__free_unpacked(received, NULL);
+}
+
+void propagate_request(struct request_t* request){
+
+    printf("Propagating request to servers.....\n");
+
+    if(rtree.zNextNode == NULL){
+        return;
+    }
+
+    MessageT msg;
+    message_t__init(&msg);
+
+    if(request->op == 0){
+        //delete
+
+        msg.opcode = 30;
+        msg.c_type = 10;
+        msg.data.len = strlen(request->key) + 1;
+        msg.data.data = malloc(msg.data.len * sizeof(char));
+        memcpy(msg.data.data, request->key, msg.data.len);
+
+        printf("Created del message! \n");
+
+    } else {
+        //put
+
+        msg.opcode = 50;
+        msg.c_type = 30;
+
+        MessageT__Entry temp_entry;
+        message_t__entry__init(&temp_entry);
+
+        //copy key
+        temp_entry.key = malloc(sizeof(char) * strlen(request->key) + 1);
+
+        strcpy(temp_entry.key, request->key);
+
+        //copy data
+        ProtobufCBinaryData temp_data;
+
+        temp_data.len = request->data->datasize;
+
+        temp_data.data = malloc(request->data->datasize);
+
+        memcpy(temp_data.data, request->data->data, request->data->datasize);
+
+        temp_entry.data = temp_data;
+
+        msg.entry = &temp_entry;
+
+
+        printf("Created put message with key %s - value %s! \n", msg.entry->key, msg.entry->data.data);
+
+    }
+
+    send_receive(&msg);
+}
+
+void sort_list(zoo_string** children_list){
+    int j;
+    int i;
+    char* temp;
+
+
+    for(i=0; i < (*children_list)->count ;i++){
+      
+      for(j=i+1; j< (*children_list)->count ;j++){
+         
+         if(strcmp((*children_list)->data[i], (*children_list)->data[j] ) > 0){
+            
+            temp = malloc(strlen((*children_list)->data[i]) + 1);
+
+            strcpy(temp, (*children_list)->data[i] );
+            strcpy((*children_list)->data[i], (*children_list)->data[j] );
+            strcpy((*children_list)->data[j],temp);
+
+            free(temp);
+
+         }
+      }
+
+    }
+}
+
+int get_computer_ip(char** buffer){
+
+    FILE *pf;
+
+    char command[1024];
+    char data[512];
+
+    //Set command
+    sprintf(command, "ip route get 1.1.1.1 | grep -oP 'src \\K\\S+'");
+
+    pf = popen(command , "r");
+
+    fgets(data, 512 , pf);
+    int len = strlen(data);
+    data[len-1] = '\0';
+
+    *buffer = data;
+
+    return 0;
+}
 
 int verify(int op_n) {
 
@@ -69,54 +253,6 @@ int verify(int op_n) {
     }
 
     return 1;
-}
-
-int tree_skel_init(char* zHost, char* address){
-
-    char* zHost_temp = malloc(sizeof(char) * strlen(zHost) + 1);
-    strcpy(zHost_temp , zHost);
-
-    char* address_temp = malloc(sizeof(char) * strlen(address) + 1);
-    strcpy(address_temp , address);
-
-    //Connect to zookeper
-    zookeeper_connect(zHost_temp , address_temp);
-
-    free(address_temp);
-    free(zHost_temp);
-
-    tree = tree_create();
-
-    op_status.max_proc = 0;
-    op_status.in_progress = malloc(sizeof(int));
-
-    queue_head = NULL;
-
-    pthread_mutex_init(&queue_lock, NULL);
-    pthread_cond_init(&queue_not_empty, NULL);
-
-    pthread_mutex_init(&op_proc_lock, NULL);
-
-    pthread_mutex_init(&tree_lock, NULL);
-
-    if(tree == NULL){
-        return -1;
-    }
-
-    //Create threads
-    pthread_t thread;
-
-    int i = 1;
-
-    int result = pthread_create(&thread, NULL, process_request, (void *)(intptr_t)i);
-    pthread_detach(thread);
-
-    if(result < 0){
-        perror("Failed to create thread");
-        return -1;
-    }
-
-    return 0;
 }
 
 int zookeeper_connect(char* host, char* sv_port){
@@ -186,6 +322,54 @@ int zookeeper_connect(char* host, char* sv_port){
 
 }
 
+int tree_skel_init(char* zHost, char* address){
+
+    char* zHost_temp = malloc(sizeof(char) * strlen(zHost) + 1);
+    strcpy(zHost_temp , zHost);
+
+    char* address_temp = malloc(sizeof(char) * strlen(address) + 1);
+    strcpy(address_temp , address);
+
+    //Connect to zookeper
+    zookeeper_connect(zHost_temp , address_temp);
+
+    free(address_temp);
+    free(zHost_temp);
+
+    tree = tree_create();
+
+    op_status.max_proc = 0;
+    op_status.in_progress = malloc(sizeof(int));
+
+    queue_head = NULL;
+
+    pthread_mutex_init(&queue_lock, NULL);
+    pthread_cond_init(&queue_not_empty, NULL);
+
+    pthread_mutex_init(&op_proc_lock, NULL);
+
+    pthread_mutex_init(&tree_lock, NULL);
+
+    if(tree == NULL){
+        return -1;
+    }
+
+    //Create threads
+    pthread_t thread;
+
+    int i = 1;
+
+    int result = pthread_create(&thread, NULL, process_request, (void *)(intptr_t)i);
+    pthread_detach(thread);
+
+    if(result < 0){
+        perror("Failed to create thread");
+        return -1;
+    }
+
+    return 0;
+}
+
 int connect_to_server(char* address){
 
     printf("Address: %s\n", address);
@@ -213,7 +397,7 @@ int connect_to_server(char* address){
         printf("Failed to connect to tree\n");
         free(address_temp);
         free(address_split);
-        return NULL;
+        return -1;
     }
 
     printf("Connecting to ip: %s, port: %s\n", address_split[0], address_split[1]);
@@ -247,49 +431,6 @@ int connect_to_server(char* address){
 
 }
 
-int get_computer_ip(char** buffer){
-
-    /*
-    int n;
-
-    struct ifreq ifr;
-
-    char array[] = "enp0s3";
-
-    n = socket(AF_INET, SOCK_DGRAM, 0);
-
-    ifr.ifr_addr.sa_family = AF_INET;
-
-    strncpy(ifr.ifr_name , array , IFNAMSIZ - 1);
-
-    ioctl(n, SIOCGIFADDR, &ifr);
-
-    close(n);
-
-    */
-
-    //*buffer = inet_ntoa(( (struct sockaddr_in *)&ifr.ifr_addr )->sin_addr);
-
-
-    FILE *pf;
-
-    char command[1024];
-    char data[512];
-
-    //Set command
-    sprintf(command, "ip route get 1.1.1.1 | grep -oP 'src \\K\\S+'");
-
-    pf = popen(command , "r");
-
-    fgets(data, 512 , pf);
-    int len = strlen(data);
-    data[len-1] = '\0';
-
-    *buffer = data;
-
-    return 0;
-}
-
 void child_watcher(zhandle_t *zh, int type, int state, const char *zpath, void *watcher_ctx){
     
     char* chain = "/chain";
@@ -300,8 +441,9 @@ void child_watcher(zhandle_t *zh, int type, int state, const char *zpath, void *
 
 
     if (retval != ZOK) {
+        free(children_list);
         perror("Error getting child list!");
-        return -1;
+        return;
     }
         
     if (children_list->count >= 2){
@@ -346,52 +488,24 @@ void child_watcher(zhandle_t *zh, int type, int state, const char *zpath, void *
             retval = zoo_get(zh, next, 0 , buffer, buffer_len, NULL);
 
             if (retval != ZOK){
+                free(children_list);
                 perror("Error getting metadata from node!");
-                return -1;
+                return;
             }
 
             if(connect_to_server(buffer) != 0) {
+                free(children_list);
                 perror("Error connecting to chain server!");
-                return -1;
+                return;
             }
-
-         }
-
-            
+        }
 
     } else {
         //This is last node
         rtree.zNextNode = NULL;
     }
-
-    return 0;
-
-}
-
-void sort_list(zoo_string** children_list){
-    int j;
-    int i;
-    char* temp;
-
-
-    for(i=0; i < (*children_list)->count ;i++){
-      
-      for(j=i+1; j< (*children_list)->count ;j++){
-         
-         if(strcmp((*children_list)->data[i], (*children_list)->data[j] ) > 0){
-            
-            temp = malloc(strlen((*children_list)->data[i]) + 1);
-
-            strcpy(temp, (*children_list)->data[i] );
-            strcpy((*children_list)->data[i], (*children_list)->data[j] );
-            strcpy((*children_list)->data[j],temp);
-
-            free(temp);
-
-         }
-      }
-
-    }
+    free(children_list);
+    return;
 }
 
 void watcher_server(zhandle_t *zh, int type, int state, const char *path, void *watcherCtx){
@@ -478,142 +592,6 @@ void * process_request (void *params){
 
     }
 
-}
-
-void propagate_request(struct request_t* request){
-
-    printf("Propagating request to servers.....\n");
-
-    if(rtree.zNextNode == NULL){
-        return;
-    }
-
-    MessageT msg;
-    message_t__init(&msg);
-
-    if(request->op == 0){
-        //delete
-
-        msg.opcode = 30;
-        msg.c_type = 10;
-        msg.data.len = strlen(request->key) + 1;
-        msg.data.data = malloc(msg.data.len * sizeof(char));
-        memcpy(msg.data.data, request->key, msg.data.len);
-
-        printf("Created del message! \n");
-
-    } else {
-        //put
-
-        msg.opcode = 50;
-        msg.c_type = 30;
-
-        MessageT__Entry temp_entry;
-        message_t__entry__init(&temp_entry);
-
-        //copy key
-        temp_entry.key = malloc(sizeof(char) * strlen(request->key) + 1);
-
-        strcpy(temp_entry.key, request->key);
-
-        //copy data
-        ProtobufCBinaryData temp_data;
-
-        temp_data.len = request->data->datasize;
-
-        temp_data.data = malloc(request->data->datasize);
-
-        memcpy(temp_data.data, request->data->data, request->data->datasize);
-
-        temp_entry.data = temp_data;
-
-        msg.entry = &temp_entry;
-
-
-        printf("Created put message with key %s - value %s! \n", msg.entry->key, msg.entry->data.data);
-
-    }
-
-    send_receive(&msg);
-}
-
-void send_receive(MessageT *msg){
-
-    printf("Talking with server....\n");
-
-    if(rtree.zNextNode == NULL){
-        return -1;
-    }
-
-    int socketfd = rtree.nextSocket;
-
-    //Serialize message:
-    int length;
-    uint8_t* buffer;
-
-    length = message_t__get_packed_size(msg);
-    buffer = malloc(length);
-
-    if(buffer == NULL){
-        perror("Buffer error");
-        return NULL;
-    }
-
-    message_t__pack(msg, buffer);
-
-    //Send message to server:
-
-    //Send size
-    int length_buf = htons(length);
-
-    if(write_all(socketfd, &length_buf, sizeof(int)) < 0){
-        return NULL;
-    }
-
-    //Send data
-    if(write_all(socketfd, buffer, length) != length){
-        return NULL;
-    }
-
-    free(buffer);
-
-    // Receive message from server
-
-    //Receive size
-    int* length_temp = malloc(sizeof(int));
-
-    if(read_all(socketfd, length_temp, sizeof(int)) < 0){
-        return NULL;
-    }
-
-    length = ntohs(*length_temp);
-
-    free(length_temp);
-
-    // Receive message
-    
-    uint8_t* buffer_rcv = malloc(length);
-
-    if(buffer_rcv == NULL){
-        perror("Buffer error");
-        return NULL;
-    }
-
-    if((read_all(socketfd, buffer_rcv,length)) != length){
-        return NULL;
-    }
-
-    MessageT* received = NULL;
-
-    received = message_t__unpack(NULL,length,buffer_rcv);
-    if (received == NULL) {
-        perror("Error unpacking message\n");
-        return NULL;
-    }
-
-    free(buffer_rcv);
-
-    message_t__free_unpacked(received, NULL);
 }
 
 int queue_add(MessageT* msg){
