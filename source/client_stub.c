@@ -113,7 +113,6 @@ void connection_watcher(zhandle_t *zzh, int type, int state, const char *path, v
 			is_connected = 1; 
 		} else {
 			is_connected = 0;
-            zookeeper_close(zzh);
 		}
 	} 
 }
@@ -239,7 +238,16 @@ void child_watcher(zhandle_t *wzh, int type, int state, const char *zpath, void 
             }
 
             sort_list(&children_list);
-            network_close(rtree_stub);
+
+            if(rtree_stub != NULL) {
+
+                network_close(rtree_stub);
+                free(rtree_stub->rtree_headAddr);
+                free(rtree_stub->rtree_tailAddr);
+                free(rtree_stub);
+
+            }
+
             rtree_stub = set_rtree(children_list);
 
             if (network_connect(rtree_stub) < 0) {
@@ -250,12 +258,16 @@ void child_watcher(zhandle_t *wzh, int type, int state, const char *zpath, void 
             }
         } 
     }
+
+    free(children_list); //Possible problem
 }
 
 
 
 int rtree_disconnect(struct rtree_t *rtree) {
     
+    printf("This is happening!");
+
     if(network_close(rtree) < 0){
         perror("Error closing socket");
         zookeeper_close(zh);
@@ -265,7 +277,8 @@ int rtree_disconnect(struct rtree_t *rtree) {
 
         return -1;
     }
-
+    
+    zookeeper_close(zh);
     free(rtree->rtree_headAddr);
     free(rtree->rtree_tailAddr);
     free(rtree);

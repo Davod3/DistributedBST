@@ -15,7 +15,7 @@
 struct rtree_t {
     zhandle_t* handler;
     char* zMyNode;
-    int zNextNode;
+    char* zNextNode;
     int nextSocket;
 };
 

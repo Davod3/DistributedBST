@@ -17,7 +17,13 @@
 struct rtree_t* rtree;
 
 //Empty on purpose
-void sigHandler() {}
+void sigintHandler() {
+
+    rtree_disconnect(rtree);
+
+}
+//Empty on purpose
+void sigpipeHandler(){}
 
 int main(int argc, char const *argv[]) {
 
@@ -36,11 +42,21 @@ int main(int argc, char const *argv[]) {
     printf("Insira o comando: \n");
 
         struct sigaction sa;
-        sa.sa_handler = sigHandler;
+        sa.sa_handler = sigintHandler;
         sa.sa_flags = 0;
         sigemptyset(&sa.sa_mask); //apaga a máscara (nenhum sinal é bloqueado)
 
-        if (sigaction(SIGINT, &sa, NULL) == -1 || sigaction(SIGPIPE, &sa, NULL) == -1) {
+        if (sigaction(SIGINT, &sa, NULL) == -1) {
+            perror("main:");
+            exit(-1);
+        }
+
+        struct sigaction sb;
+        sb.sa_handler = sigpipeHandler;
+        sb.sa_flags = 0;
+        sigemptyset(&sb.sa_mask);
+
+        if (sigaction(SIGPIPE, &sb, NULL) == -1) {
             perror("main:");
             exit(-1);
         }

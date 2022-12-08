@@ -145,7 +145,11 @@ void propagate_request(struct request_t* request){
         msg.data.data = malloc(msg.data.len * sizeof(char));
         memcpy(msg.data.data, request->key, msg.data.len);
 
+        send_receive(&msg);
+
         printf("Created del message! \n");
+
+        free(msg.data.data);//possible error
 
     } else {
         //put
@@ -174,12 +178,15 @@ void propagate_request(struct request_t* request){
 
         msg.entry = &temp_entry;
 
+        send_receive(&msg);
 
         printf("Created put message with key %s - value %s! \n", msg.entry->key, msg.entry->data.data);
 
+        free(temp_entry.key); //possible error
+        free(temp_data.data);//possible error
+
     }
 
-    send_receive(&msg);
 }
 
 void sort_list(zoo_string** children_list){
@@ -295,8 +302,6 @@ int zookeeper_connect(char* host, char* sv_port){
     char* IPbuffer = NULL;
 
     get_computer_ip(&IPbuffer);
-
-    printf("Gets here!\n");
 
     strcat(IPport, IPbuffer);
     strcat(IPport, ":");
@@ -425,7 +430,12 @@ int connect_to_server(char* address){
         return -1;
     }
 
+    //Possible problem
+    close(rtree.nextSocket);
     rtree.nextSocket = socketfd;
+
+    free(address_temp);
+    free(address_split);
 
     return 0;
 
@@ -493,11 +503,16 @@ void child_watcher(zhandle_t *zh, int type, int state, const char *zpath, void *
                 return;
             }
 
+            //Possible problem
+
             if(connect_to_server(buffer) != 0) {
                 free(children_list);
                 perror("Error connecting to chain server!");
                 return;
             }
+
+            free(buffer);
+            free(buffer_len);
         }
 
     } else {
@@ -520,6 +535,10 @@ void tree_skel_destroy(){
         return;
     }
 
+    close(rtree.nextSocket);
+    zookeeper_close(rtree.handler);
+    free(rtree.zMyNode);
+    free(rtree.zNextNode);
     tree_destroy(tree);
     free(queue_head);
     free(op_status.in_progress);
