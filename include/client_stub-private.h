@@ -9,8 +9,6 @@
 
 
 struct rtree_t {
-    //int sockfd;
-    //struct sockaddr_in* serverAddr;
     struct sockaddr_in* rtree_headAddr;
     struct sockaddr_in* rtree_tailAddr;
     int rtree_head;

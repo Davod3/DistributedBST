@@ -33,16 +33,6 @@ int main(int argc, char const *argv[]) {
         return -1;
     }
 
-    /*
-
-    if(zookeeper_connect(argv[1]) == -1){
-        printf("O ZooKeeper não está ligado!\n");
-        return -1;
-    }
-
-    */
-
-
     rtree = rtree_connect(argv[1]);
     if (rtree == NULL) {
         return -1;

@@ -149,6 +149,7 @@ MessageT *network_send_receive(struct rtree_t * rtree, MessageT *msg) {
 }
 
 int network_close(struct rtree_t * rtree) {
+
     if(close(rtree->rtree_head) == -1)
         return -1;
     else
