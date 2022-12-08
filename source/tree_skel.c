@@ -189,7 +189,9 @@ int zookeeper_connect(char* host, char* sv_port){
 int connect_to_server(char* address){
 
     printf("Address: %s\n", address);
-
+    
+    //Prevent race conditions
+    sleep(2);
 
     char* address_temp = malloc(sizeof(char) * strlen(address) + 1);
     strcpy(address_temp, address);
@@ -485,11 +487,6 @@ void propagate_request(struct request_t* request){
     if(rtree.zNextNode == NULL){
         return;
     }
-
-    //request->data;
-    //request->key;
-    //request->op;
-    //request->op_n;
 
     MessageT msg;
     message_t__init(&msg);

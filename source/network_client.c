@@ -96,22 +96,16 @@ MessageT *network_send_receive(struct rtree_t * rtree, MessageT *msg) {
     //Send size
     int length_buf = htons(length);
 
-    printf("GETS HERE 1\n");
-
     if(write_all(socketfd, &length_buf, sizeof(int)) < 0){
         printf("Write failed 1 \n");
         return NULL;
     }
-
-    printf("GETS HERE 2\n");
 
     //Send data
     if(write_all(socketfd, buffer, length) != length){
         printf("Write failed 2 \n");
         return NULL;
     }
-
-    printf("GETS HERE 3\n");
 
     free(buffer);
 

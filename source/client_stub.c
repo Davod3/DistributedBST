@@ -53,6 +53,7 @@ struct rtree_t *rtree_connect(const char *address_port) {
         free(children_list);
         return NULL;
     }
+
     for (int i = 0; i < children_list->count; i++)  {
         printf("(%d): %s\n", i+1, children_list->data[i]);
     }
@@ -316,6 +317,19 @@ int rtree_put(struct rtree_t *rtree, struct entry_t *entry) {
     free(temp_entry.key);
     free(temp_data.data);
     message_t__free_unpacked(received, NULL);
+
+    //After put operation, verify completion
+    sleep(2);
+
+    while(rtree_verify(rtree, result) != 1){
+        //Operation has not reached tail server, redo
+        result = rtree_put(rtree, entry);
+
+        sleep(2);
+    }
+
+    //Operation completed
+
     return result;
 }
 
@@ -379,6 +393,21 @@ int rtree_del(struct rtree_t *rtree, char *key) {
 
     int result = received->number;
     message_t__free_unpacked(received, NULL);
+
+
+    //After put operation, verify completion
+    sleep(2);
+
+    while(rtree_verify(rtree, result) != 1){
+        //Operation has not reached tail server, redo
+        result = rtree_del(rtree, key);
+
+        sleep(2);
+    }
+
+    //Operation completed
+
+
     return result;
 }
 
@@ -533,7 +562,6 @@ int rtree_verify(struct rtree_t *rtree, int op_n){
 
     int result = received->number;
     message_t__free_unpacked(received, NULL);
-    printf("Verifying tree\n");
     return result;
         
 }
