@@ -61,9 +61,10 @@ int network_connect(struct rtree_t *rtree) {
     rtree->rtree_head = rtree_hd_sock;
     rtree->rtree_tail = rtree_tl_sock;
 
-
     return 0;
 }
+
+
 
 MessageT *network_send_receive(struct rtree_t * rtree, MessageT *msg) {
     
@@ -144,9 +145,10 @@ MessageT *network_send_receive(struct rtree_t * rtree, MessageT *msg) {
     }
 
     free(buffer_rcv);
-
     return received;                                        
 }
+
+
 
 int network_close(struct rtree_t * rtree) {
 

@@ -16,15 +16,8 @@
 
 struct rtree_t* rtree;
 
-void sigHandler() {
-    
-    printf("HELLO WORLD!\n");
-    /*
-    int state = rtree_disconnect(rtree);
-    exit(state);
-    */
-
-}
+//Empty on purpose
+void sigHandler() {}
 
 int main(int argc, char const *argv[]) {
 
