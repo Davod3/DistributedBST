@@ -45,6 +45,199 @@ struct rtree_t rtree;
 typedef struct String_vector zoo_string;
 static char *watcher_ctx = "ZooKeeper Data Watcher";
 
+void sort_list(zoo_string** children_list){
+    int j;
+    int i;
+    char* temp;
+
+
+    for(i=0; i < (*children_list)->count ;i++){
+      
+      for(j=i+1; j< (*children_list)->count ;j++){
+         
+         if(strcmp((*children_list)->data[i], (*children_list)->data[j] ) > 0){
+            
+            temp = malloc(strlen((*children_list)->data[i]) + 1);
+
+            strcpy(temp, (*children_list)->data[i] );
+            strcpy((*children_list)->data[i], (*children_list)->data[j] );
+            strcpy((*children_list)->data[j],temp);
+
+            free(temp);
+
+         }
+      }
+
+    }
+}
+
+int get_computer_ip(char** buffer){
+
+    FILE *pf;
+
+    char command[1024];
+    char data[512];
+
+    //Set command
+    sprintf(command, "ip route get 1.1.1.1 | grep -oP 'src \\K\\S+'");
+
+    pf = popen(command , "r");
+
+    fgets(data, 512 , pf);
+    int len = strlen(data);
+    data[len-1] = '\0';
+
+    *buffer = data;
+
+    return 0;
+}
+
+int zookeeper_connect(char* host, char* sv_port){
+
+    zoo_set_debug_level((ZooLogLevel)0);
+
+    zhandle_t* zh = zookeeper_init(host, watcher_server, 2000, 0, NULL, 0);
+    char* root = "/";
+
+    if (zh == NULL){
+        perror("Error connecting to ZooKeeper server!\n");
+        return -1;
+    }
+
+    printf("Conectado ao zookeeper! \n");
+
+    rtree.handler = zh;
+
+    //Check if /chain already exists
+
+    int retval = zoo_exists(zh, "/chain", 0, NULL);
+
+    if(retval == ZNONODE){
+        //Chain does not exist, create
+
+        retval = zoo_create(zh, "/chain", NULL, -1, & ZOO_OPEN_ACL_UNSAFE, 0 , NULL, 0);
+
+        if(retval != ZOK) {
+            perror("Error creating chain node!");
+            return -1;
+        }
+
+    }
+
+    //Chain exists, create child
+    char* node = malloc(1024);
+
+    char* IPport = malloc(1024);
+
+    char* IPbuffer = NULL;
+
+    get_computer_ip(&IPbuffer);
+
+    printf("Gets here!\n");
+
+    strcat(IPport, IPbuffer);
+    strcat(IPport, ":");
+    strcat(IPport, sv_port);
+
+    int size = strlen(IPport) + 1;
+
+    retval = zoo_create(zh, "/chain/node", IPport, size, & ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL | ZOO_SEQUENCE, node, 1024);
+
+    if(retval != ZOK){
+        perror("Error creating client node!");
+        return -1;
+    }
+
+    free(IPport);
+
+    rtree.zMyNode = node;
+
+    child_watcher(zh, 0, 0, NULL, watcher_ctx);
+
+    return 0;
+
+
+}
+
+void send_receive(MessageT *msg){
+
+    printf("Talking with server....\n");
+
+    if(rtree.zNextNode == NULL){
+        return;
+    }
+
+    int socketfd = rtree.nextSocket;
+
+    //Serialize message:
+    int length;
+    uint8_t* buffer;
+
+    length = message_t__get_packed_size(msg);
+    buffer = malloc(length);
+
+    if(buffer == NULL){
+        perror("Buffer error");
+        return;
+    }
+
+    message_t__pack(msg, buffer);
+
+    //Send message to server:
+
+    //Send size
+    int length_buf = htons(length);
+
+    if(write_all(socketfd, &length_buf, sizeof(int)) < 0){
+        return;
+    }
+
+    //Send data
+    if(write_all(socketfd, buffer, length) != length){
+        return;
+    }
+
+    free(buffer);
+
+    // Receive message from server
+
+    //Receive size
+    int* length_temp = malloc(sizeof(int));
+
+    if(read_all(socketfd, length_temp, sizeof(int)) < 0){
+        return;
+    }
+
+    length = ntohs(*length_temp);
+
+    free(length_temp);
+
+    // Receive message
+    
+    uint8_t* buffer_rcv = malloc(length);
+
+    if(buffer_rcv == NULL){
+        perror("Buffer error");
+        return;
+    }
+
+    if((read_all(socketfd, buffer_rcv,length)) != length){
+        return;
+    }
+
+    MessageT* received = NULL;
+
+    received = message_t__unpack(NULL,length,buffer_rcv);
+    if (received == NULL) {
+        perror("Error unpacking message\n");
+        return;
+    }
+
+    free(buffer_rcv);
+
+    message_t__free_unpacked(received, NULL);
+}
+
 int verify(int op_n) {
 
     if (op_n <= 0) {
@@ -119,71 +312,61 @@ int tree_skel_init(char* zHost, char* address){
     return 0;
 }
 
-int zookeeper_connect(char* host, char* sv_port){
+void propagate_request(struct request_t* request){
 
-    zoo_set_debug_level((ZooLogLevel)0);
+    printf("Propagating request to servers.....\n");
 
-    zhandle_t* zh = zookeeper_init(host, watcher_server, 2000, 0, NULL, 0);
-    char* root = "/";
-
-    if (zh == NULL){
-        perror("Error connecting to ZooKeeper server!\n");
-        return -1;
+    if(rtree.zNextNode == NULL){
+        return;
     }
 
-    printf("Conectado ao zookeeper! \n");
+    MessageT msg;
+    message_t__init(&msg);
 
-    rtree.handler = zh;
+    if(request->op == 0){
+        //delete
 
-    //Check if /chain already exists
+        msg.opcode = 30;
+        msg.c_type = 10;
+        msg.data.len = strlen(request->key) + 1;
+        msg.data.data = malloc(msg.data.len * sizeof(char));
+        memcpy(msg.data.data, request->key, msg.data.len);
 
-    int retval = zoo_exists(zh, "/chain", 0, NULL);
+        printf("Created del message! \n");
 
-    if(retval == ZNONODE){
-        //Chain does not exist, create
+    } else {
+        //put
 
-        retval = zoo_create(zh, "/chain", NULL, -1, & ZOO_OPEN_ACL_UNSAFE, 0 , NULL, 0);
+        msg.opcode = 50;
+        msg.c_type = 30;
 
-        if(retval != ZOK) {
-            perror("Error creating chain node!");
-            return -1;
-        }
+        MessageT__Entry temp_entry;
+        message_t__entry__init(&temp_entry);
+
+        //copy key
+        temp_entry.key = malloc(sizeof(char) * strlen(request->key) + 1);
+
+        strcpy(temp_entry.key, request->key);
+
+        //copy data
+        ProtobufCBinaryData temp_data;
+
+        temp_data.len = request->data->datasize;
+
+        temp_data.data = malloc(request->data->datasize);
+
+        memcpy(temp_data.data, request->data->data, request->data->datasize);
+
+        temp_entry.data = temp_data;
+
+        msg.entry = &temp_entry;
+
+
+        printf("Created put message with key %s - value %s! \n", msg.entry->key, msg.entry->data.data);
 
     }
 
-    //Chain exists, create child
-    char* node = malloc(1024);
-
-    char* IPport = malloc(1024);
-
-    char* IPbuffer = NULL;
-
-    get_computer_ip(&IPbuffer);
-
-    printf("Gets here!\n");
-
-    strcat(IPport, IPbuffer);
-    strcat(IPport, ":");
-    strcat(IPport, sv_port);
-
-    int size = strlen(IPport) + 1;
-
-    retval = zoo_create(zh, "/chain/node", IPport, size, & ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL | ZOO_SEQUENCE, node, 1024);
-
-    if(retval != ZOK){
-        perror("Error creating client node!");
-        return -1;
-    }
-
-    free(IPport);
-
-    rtree.zMyNode = node;
-
-    child_watcher(zh, 0, 0, NULL, watcher_ctx);
-
-    return 0;
-
-
+    send_receive(&msg);
 }
 
 int connect_to_server(char* address){
@@ -213,7 +396,7 @@ int connect_to_server(char* address){
         printf("Failed to connect to tree\n");
         free(address_temp);
         free(address_split);
-        return NULL;
+        return -1;
     }
 
     printf("Connecting to ip: %s, port: %s\n", address_split[0], address_split[1]);
@@ -247,49 +430,6 @@ int connect_to_server(char* address){
 
 }
 
-int get_computer_ip(char** buffer){
-
-    /*
-    int n;
-
-    struct ifreq ifr;
-
-    char array[] = "enp0s3";
-
-    n = socket(AF_INET, SOCK_DGRAM, 0);
-
-    ifr.ifr_addr.sa_family = AF_INET;
-
-    strncpy(ifr.ifr_name , array , IFNAMSIZ - 1);
-
-    ioctl(n, SIOCGIFADDR, &ifr);
-
-    close(n);
-
-    */
-
-    //*buffer = inet_ntoa(( (struct sockaddr_in *)&ifr.ifr_addr )->sin_addr);
-
-
-    FILE *pf;
-
-    char command[1024];
-    char data[512];
-
-    //Set command
-    sprintf(command, "ip route get 1.1.1.1 | grep -oP 'src \\K\\S+'");
-
-    pf = popen(command , "r");
-
-    fgets(data, 512 , pf);
-    int len = strlen(data);
-    data[len-1] = '\0';
-
-    *buffer = data;
-
-    return 0;
-}
-
 void child_watcher(zhandle_t *zh, int type, int state, const char *zpath, void *watcher_ctx){
     
     char* chain = "/chain";
@@ -301,7 +441,7 @@ void child_watcher(zhandle_t *zh, int type, int state, const char *zpath, void *
 
     if (retval != ZOK) {
         perror("Error getting child list!");
-        return -1;
+        return;
     }
         
     if (children_list->count >= 2){
@@ -334,7 +474,7 @@ void child_watcher(zhandle_t *zh, int type, int state, const char *zpath, void *
 
          }
 
-         rtree.zNextNode = next;
+         rtree.zNextNode = (long)next;
 
          if(next != NULL) {
 
@@ -347,12 +487,12 @@ void child_watcher(zhandle_t *zh, int type, int state, const char *zpath, void *
 
             if (retval != ZOK){
                 perror("Error getting metadata from node!");
-                return -1;
+                return;
             }
 
             if(connect_to_server(buffer) != 0) {
                 perror("Error connecting to chain server!");
-                return -1;
+                return;
             }
 
          }
@@ -362,35 +502,6 @@ void child_watcher(zhandle_t *zh, int type, int state, const char *zpath, void *
     } else {
         //This is last node
         rtree.zNextNode = NULL;
-    }
-
-    return 0;
-
-}
-
-void sort_list(zoo_string** children_list){
-    int j;
-    int i;
-    char* temp;
-
-
-    for(i=0; i < (*children_list)->count ;i++){
-      
-      for(j=i+1; j< (*children_list)->count ;j++){
-         
-         if(strcmp((*children_list)->data[i], (*children_list)->data[j] ) > 0){
-            
-            temp = malloc(strlen((*children_list)->data[i]) + 1);
-
-            strcpy(temp, (*children_list)->data[i] );
-            strcpy((*children_list)->data[i], (*children_list)->data[j] );
-            strcpy((*children_list)->data[j],temp);
-
-            free(temp);
-
-         }
-      }
-
     }
 }
 
@@ -478,142 +589,6 @@ void * process_request (void *params){
 
     }
 
-}
-
-void propagate_request(struct request_t* request){
-
-    printf("Propagating request to servers.....\n");
-
-    if(rtree.zNextNode == NULL){
-        return;
-    }
-
-    MessageT msg;
-    message_t__init(&msg);
-
-    if(request->op == 0){
-        //delete
-
-        msg.opcode = 30;
-        msg.c_type = 10;
-        msg.data.len = strlen(request->key) + 1;
-        msg.data.data = malloc(msg.data.len * sizeof(char));
-        memcpy(msg.data.data, request->key, msg.data.len);
-
-        printf("Created del message! \n");
-
-    } else {
-        //put
-
-        msg.opcode = 50;
-        msg.c_type = 30;
-
-        MessageT__Entry temp_entry;
-        message_t__entry__init(&temp_entry);
-
-        //copy key
-        temp_entry.key = malloc(sizeof(char) * strlen(request->key) + 1);
-
-        strcpy(temp_entry.key, request->key);
-
-        //copy data
-        ProtobufCBinaryData temp_data;
-
-        temp_data.len = request->data->datasize;
-
-        temp_data.data = malloc(request->data->datasize);
-
-        memcpy(temp_data.data, request->data->data, request->data->datasize);
-
-        temp_entry.data = temp_data;
-
-        msg.entry = &temp_entry;
-
-
-        printf("Created put message with key %s - value %s! \n", msg.entry->key, msg.entry->data.data);
-
-    }
-
-    send_receive(&msg);
-}
-
-void send_receive(MessageT *msg){
-
-    printf("Talking with server....\n");
-
-    if(rtree.zNextNode == NULL){
-        return -1;
-    }
-
-    int socketfd = rtree.nextSocket;
-
-    //Serialize message:
-    int length;
-    uint8_t* buffer;
-
-    length = message_t__get_packed_size(msg);
-    buffer = malloc(length);
-
-    if(buffer == NULL){
-        perror("Buffer error");
-        return NULL;
-    }
-
-    message_t__pack(msg, buffer);
-
-    //Send message to server:
-
-    //Send size
-    int length_buf = htons(length);
-
-    if(write_all(socketfd, &length_buf, sizeof(int)) < 0){
-        return NULL;
-    }
-
-    //Send data
-    if(write_all(socketfd, buffer, length) != length){
-        return NULL;
-    }
-
-    free(buffer);
-
-    // Receive message from server
-
-    //Receive size
-    int* length_temp = malloc(sizeof(int));
-
-    if(read_all(socketfd, length_temp, sizeof(int)) < 0){
-        return NULL;
-    }
-
-    length = ntohs(*length_temp);
-
-    free(length_temp);
-
-    // Receive message
-    
-    uint8_t* buffer_rcv = malloc(length);
-
-    if(buffer_rcv == NULL){
-        perror("Buffer error");
-        return NULL;
-    }
-
-    if((read_all(socketfd, buffer_rcv,length)) != length){
-        return NULL;
-    }
-
-    MessageT* received = NULL;
-
-    received = message_t__unpack(NULL,length,buffer_rcv);
-    if (received == NULL) {
-        perror("Error unpacking message\n");
-        return NULL;
-    }
-
-    free(buffer_rcv);
-
-    message_t__free_unpacked(received, NULL);
 }
 
 int queue_add(MessageT* msg){

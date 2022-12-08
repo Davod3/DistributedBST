@@ -14,7 +14,7 @@
 char **args;
 int n_args;
 
-int main(int argc, char const *argv[])
+int main(int argc, char *argv[])
 {
     
     if(argc > 2) {
@@ -68,5 +68,5 @@ int main(int argc, char const *argv[])
 
 void signalRestart(){
     printf("Restarting...\n");
-    main(n_args, (char const**)args);
+    main(n_args, (char**)args);
 }
