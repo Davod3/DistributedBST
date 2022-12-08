@@ -10,7 +10,6 @@
 #include <message-private.h>
 #include <poll.h>
 #include <network_server-private.h>
-#include <message-private.h>
 
 int socketfd;
 

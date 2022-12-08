@@ -24,6 +24,7 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <unistd.h>
+#include <message-private.h>
 
 struct tree_t* tree = NULL;     //Tree data structure
 int last_assigned = 1;          //ID of last assigned request
