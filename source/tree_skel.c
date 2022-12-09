@@ -10,11 +10,9 @@
 #include <tree_skel.h>
 #include <entry.h>
 #include <data.h>
-#include <stdio.h>
 #include <string.h>
 #include <netdb.h>
 #include <tree_skel-private.h>
-#include <pthread.h>
 #include <stdint.h>
 #include <zookeeper/zookeeper.h>
 #include <sys/socket.h>

@@ -12,6 +12,8 @@
 #include <netdb.h>
 #include <zookeeper/zookeeper.h>
 
+/* Estrutura que guarda informação sobre o node(server) atual e o próximo
+*/
 struct rtree_t {
     zhandle_t* handler;
     char* zMyNode;
@@ -19,8 +21,44 @@ struct rtree_t {
     int nextSocket;
 };
 
+/* Esta função:
+ * - Obtém o descritor da ligação (socket) da estrutura rtree_t;
+ * - De-serializa a mensagem contida em msg;
+ * - Serializa a mensagem de resposta;
+ * - Envia a mensagem serializada para o cliente.
+ */
+void send_receive(MessageT *msg);
+
+/* Função que obtém o endereço ip da interface de rede
+principal do computador
+*/
+int get_computer_ip(char** buffer);
+
+/* Função que, dado o endereço de um servidor ZooKeeper,
+estabelece conexão com o mesmo
+*/
+int zookeeper_connect(char* host, char* sv_port);
+
+/* Função que faz a conexão com o próximo server (caso exista)
+da lista de servers do ZooKeeper
+*/
+int connect_to_server(char* address);
+
+/* Função que ordena uma dada lista
+*/
+void sort_list(zoo_string** children_list);
+
+/* FUnção que propaga um pedido ao próximo server
+*/
+void propagate_request(struct request_t* request);
+
+/* Função que é chamada quando existe uma alteração num dado node
+*/
 void child_watcher(zhandle_t *zh, int type, int state, const char *zpath, void *watcher_ctx);
 
+/* Função que é chamada quando existem alterações
+na conexão entre o server e o ZooKeeper
+*/
 void watcher_server(zhandle_t *zh, int type, int state, const char *path, void *watcherCtx);
 
 /* Função que insere na árvore um novo elemento entry

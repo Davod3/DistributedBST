@@ -9,4 +9,8 @@ void trim(char *str);
 
 /*Função que trata os sinais recebidos pelo programa
 */
-void sigHandler();
+void sigpipeHandler();
+
+/* Função que trata os sinais recebidos pelo programa
+*/
+void sigintHandler();
