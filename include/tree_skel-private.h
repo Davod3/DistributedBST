@@ -21,6 +21,8 @@ struct rtree_t {
     int nextSocket;
 };
 
+typedef struct String_vector zoo_string;
+
 /* Esta função:
  * - Obtém o descritor da ligação (socket) da estrutura rtree_t;
  * - De-serializa a mensagem contida em msg;

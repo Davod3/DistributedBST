@@ -41,7 +41,6 @@ pthread_mutex_t tree_lock;
 
 //Zookeeper
 struct rtree_t rtree;
-typedef struct String_vector zoo_string;
 static char *watcher_ctx = "ZooKeeper Data Watcher";
 
 void send_receive(MessageT *msg){

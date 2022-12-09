@@ -16,8 +16,6 @@
 #include <sdmessage.pb-c.h>
 #include "zookeeper/zookeeper.h"
 
-typedef struct String_vector zoo_string; 
-
 static zhandle_t *zh;
 static int is_connected;
 //zoo_string* children_list;

@@ -7,6 +7,8 @@
 #include "sdmessage.pb-c.h"
 #include "zookeeper/zookeeper.h"
 
+typedef struct String_vector zoo_string; 
+
 /* Estrutura que guarda os dados de ligação (head e tail)
 */
 struct rtree_t {
