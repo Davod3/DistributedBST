@@ -744,8 +744,6 @@ int put(char* key, struct data_t* data) {
     printf("Putting value %s with key %s on tree\n", (char*)data->data, key);
 
     int result = tree_put(tree, key, data);
-    //data_destroy(data);
-    //free(key);
 
     pthread_mutex_unlock(&tree_lock);
 
@@ -759,8 +757,6 @@ int del(char* key) {
     printf("Deleting entry with key %s on tree\n", key);
 
     int result = tree_del(tree, key);
-
-    //free(key);
 
     pthread_mutex_unlock(&tree_lock);
 
@@ -783,7 +779,11 @@ int get(MessageT *msg) {
 
     struct data_t* result;
 
+    pthread_mutex_lock(&tree_lock);
+
     result = tree_get(tree, key);
+
+    pthread_mutex_unlock(&tree_lock);
 
     if(result == NULL) {
         //key not found
@@ -815,7 +815,11 @@ int size(MessageT* msg) {
 
     printf("Getting size of tree\n");
 
+    pthread_mutex_lock(&tree_lock);
+
     int size = tree_size(tree);
+
+    pthread_mutex_unlock(&tree_lock);
 
     if (size < 0) {
         msg->opcode = 99;
@@ -835,7 +839,11 @@ int height(MessageT* msg) {
 
     printf("Getting height of tree\n");
 
+    pthread_mutex_lock(&tree_lock);
+
     int height = tree_height(tree);
+
+    pthread_mutex_unlock(&tree_lock);
 
     if (height < 0) {
         msg->opcode = 99;
@@ -853,7 +861,12 @@ int get_keys(MessageT* msg) {
     
     printf("Getting keys from tree...\n");
     
+    pthread_mutex_lock(&tree_lock);
+
     char** keys = tree_get_keys(tree);
+
+    pthread_mutex_unlock(&tree_lock);
+
     if(keys == NULL) {
         //erro
         printf("Error getting keys\n");
@@ -874,7 +887,9 @@ int get_values(MessageT* msg) {
 
     printf("Getting values from tree...\n");
 
+    pthread_mutex_lock(&tree_lock);
     struct data_t** values = (struct data_t**)tree_get_values(tree);
+    pthread_mutex_unlock(&tree_lock);
 
     if(values == NULL) {
 
