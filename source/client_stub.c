@@ -286,9 +286,6 @@ int rtree_disconnect(struct rtree_t *rtree) {
     }
     
     zookeeper_close(zh);
-    free(rtree->rtree_headAddr);
-    free(rtree->rtree_tailAddr);
-    free(rtree);
     return 0;
 }
 
