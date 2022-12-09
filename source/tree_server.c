@@ -46,7 +46,9 @@ int main(int argc, char *argv[])
             exit(-1);
         }
 
-        tree_skel_init(argv[2], argv[1]);
+        if(tree_skel_init(argv[2], argv[1]) != 0){
+            exit(-1);
+        }
 
         int result = network_main_loop(listening_socket);
 

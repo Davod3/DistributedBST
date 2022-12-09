@@ -235,9 +235,20 @@ void child_watcher(zhandle_t *wzh, int type, int state, const char *zpath, void 
             /* Get the updated children and reset the watch */ 
             if (ZOK != zoo_wget_children(zh, chain_path, child_watcher, watcher_ctx, children_list)) {
                 printf("Error setting watch at %s!\n", chain_path);
+                free(children_list);
+                zookeeper_close(zh);
+                exit(-1);
             }
 
             sort_list(&children_list);
+
+            if (children_list == NULL || children_list->count == 0) {
+                printf("O ZooKeeper não tem nodes!\n");
+                free(children_list);
+                zookeeper_close(zh);
+                exit(-1);
+            }
+
 
             if(rtree_stub != NULL) {
 
@@ -254,7 +265,7 @@ void child_watcher(zhandle_t *wzh, int type, int state, const char *zpath, void 
                 perror("Failed to connect to tree");
                 free(children_list);
                 zookeeper_close(zh);
-                return;
+                exit(-1);
             }
         } 
     }
@@ -265,8 +276,6 @@ void child_watcher(zhandle_t *wzh, int type, int state, const char *zpath, void 
 
 
 int rtree_disconnect(struct rtree_t *rtree) {
-    
-    printf("This is happening!");
 
     if(network_close(rtree) < 0){
         perror("Error closing socket");

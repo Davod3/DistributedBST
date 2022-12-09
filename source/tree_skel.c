@@ -274,7 +274,6 @@ int zookeeper_connect(char* host, char* sv_port){
         return -1;
     }
 
-    printf("Conectado ao zookeeper! \n");
 
     rtree.handler = zh;
 
@@ -336,7 +335,9 @@ int tree_skel_init(char* zHost, char* address){
     strcpy(address_temp , address);
 
     //Connect to zookeper
-    zookeeper_connect(zHost_temp , address_temp);
+    if(zookeeper_connect(zHost_temp , address_temp) != 0){
+        return -1;
+    }
 
     free(address_temp);
     free(zHost_temp);
