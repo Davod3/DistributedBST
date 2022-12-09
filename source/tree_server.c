@@ -62,7 +62,7 @@ int main(int argc, char *argv[])
         tree_skel_destroy();
 
     } else {
-        printf("Incorrect usage try ./tree-server <port> <n_threads>\n");
+        printf("Incorrect usage try ./tree-server <port> <ip_ZooKeeper>:<port_ZooKeeper>\n");
     }
 
     return 0;
