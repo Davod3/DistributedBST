@@ -19,7 +19,8 @@ struct rtree_t* rtree;
 //Empty on purpose
 void sigintHandler() {
 
-    rtree_disconnect(rtree);
+    int state = rtree_disconnect(rtree);
+    exit(state);
 
 }
 //Empty on purpose

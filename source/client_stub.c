@@ -135,7 +135,7 @@ struct rtree_t* set_rtree(zoo_string* children_list) {
     if(children_list == NULL || children_list->count == 0) {
         printf("O ZooKeeper não tem servidores disponíveis!\n");
         zookeeper_close(zh);
-        exit(-1);
+        return NULL;
     }
 
     char* temp1 = children_list->data[0];

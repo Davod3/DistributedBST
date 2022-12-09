@@ -376,8 +376,6 @@ int tree_skel_init(char* zHost, char* address){
 }
 
 int connect_to_server(char* address){
-
-    printf("Address: %s\n", address);
     
     //Prevent race conditions
     sleep(2);
